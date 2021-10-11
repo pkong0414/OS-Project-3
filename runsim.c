@@ -2,6 +2,7 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <pthread.h>
 #include <unistd.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -11,7 +12,9 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <sys/wait.h>
+#include <signal.h>
 #include "detachandremove.h"
 #include "license.h"
 #define PERM (IPC_CREAT | S_IRUSR | S_IWUSR)
@@ -22,21 +25,25 @@
 void initShm(key_t myKey);                          //This function will initialize shared memory.
 void docommand( const int i );                      //This function will manage the giving and receiving of licenses.
 void critical_section();                            //This helper function will operate the critical section.
-void createChildren(int);                           //This function will create the children processes from main process
+void createChildren();                           //This function will create the children processes from main process
 void createGranChildren();                          //This function will be doing the exec functions.
 void parsingArgs(int argc, char** argv);            //This helper function will parse command line args.
-void signalHandler(int SIGNAL);                     //This is our signal handler
 int max(int numArr[], int n);
 
+// SIGNAL HANDLERS
+static void myTimeOutHandler( int s );                    //This is our signal handler for timeouts
+static void myKillSignalHandler( int s );                 //This is our signal handler for interrupts
+static int setupUserInterrupt( void );
+static int setupinterrupt( void );
+static int setupitimer( int tValue );
+
 /* THINGS TO DO (Project3):
- *
- * Remake the getopts, You're working with a different set of arguments.
  *
  * Still make the program interrupts, need Ctrl+c and Timer still!
  * We also need to program a program timer. Default value is 100. Once the time is up,
  * the whole program shuts off no matter what.
  *
- * We'll need to make semaphores happen now.
+ *  We'll need to make semaphores happen now.
  *
  *  1. Create a Makefile that compiles the two source files. [Day 1]
  *  2. Have your main executable read in the command line arguments, validate the arguments, and set up shared memory.
@@ -68,6 +75,10 @@ sharedMem *sharedHeap;                              //shared memory object
 
 int main( int argc, char* argv[]){
     //gonna make a signal interrupt here just to see what happens
+    if( setupUserInterrupt() == -1 ){
+        perror( "failed to set up a user kill signal.\n");
+        return 1;
+    }
 
     char command[2][20];
     char buffer[MAX_CANON];
@@ -89,16 +100,43 @@ int main( int argc, char* argv[]){
 
     parsingArgs(argc, argv);
 
+    //setting up interrupts after parsing arguments
+    if (setupinterrupt() == -1) {
+        perror("Failed to set up handler for SIGALRM");
+        return 1;
+    }
+
+    if (setupitimer(tValue) == -1) {
+        perror("Failed to set up the ITIMER_PROF interval timer");
+        return 1;
+    }
+
     // Parsing is finished, now we are allocating and adding to licenses
     initShm(myKey);
     initlicense(sharedHeap);
     addtolicenses(sharedHeap, nValue);
 
     //creating child processes
-    //createChildren(nValue);
+    createChildren();
+
+    /* the parent process */
+
+    // waiting for the child process
+    while( currentConcurrentProcesses > 1 ) {
+        if (wait(&waitStatus) == -1) {
+            perror("Failed to wait for child\n");
+        } else {
+            if (WIFEXITED(waitStatus)) {
+                currentConcurrentProcesses--;
+                returnlicense(sharedHeap);
+                printf("current concurrent process %d\n", currentConcurrentProcesses);
+                printf("Child process successfully exited with status: %d\n", waitStatus);
+            }
+        }
+        printf("total processes created: %d\n", totalProcessesCreated);
+    }
 
     //detaching shared memory
-
     if(detachandremove(id, sharedHeap) == -1){
         perror("Failed to destroy shared memory segment");
         exit(EXIT_FAILURE);
@@ -145,12 +183,12 @@ void docommand(const int i){
 
     //We'll be following Bakery's Algo for this one
     int j;
-    int argumentC;
-    char **argumentV;
 
     /* Usage: ./testsim [-s seconds for sleep] [-r number of repeats]
      * We'll need to set up just like this
     */
+    char *testCallStr;
+    testCallStr = "./testsim,testsim,5,10";
     if( getlicense(sharedHeap) == 1 ) {
         do {
             sharedHeap->choosing[i] = 1;
@@ -166,9 +204,10 @@ void docommand(const int i){
 
             //critical section time!
             critical_section();
+
             printf("process %d received the license!\n", i);
             sharedHeap->number[i] = 0;                          //giving up the number
-            execl("./testsim", "testsim", "5", "10", NULL);
+            execl(testCallStr, NULL);
 
             perror("exec failed");
             //remainder section
@@ -192,11 +231,11 @@ void critical_section(){
     }
 }
 
-void createChildren( int children ){
+void createChildren(){
     int myID = 0;
 
-    while( (currentConcurrentProcesses <= MAX_PROC) && (totalProcessesCreated < children) ) {
-
+    if(currentConcurrentProcesses <= MAX_PROC) {
+        //changed this from while to if, This way it will only create 1 child!
         if ((childPid = fork()) == -1) {
             perror("Failed to create child process\n");
             if (detachandremove(id, sharedHeap) == -1) {
@@ -208,7 +247,6 @@ void createChildren( int children ){
         currentConcurrentProcesses++;
         totalProcessesCreated++;
 
-
         // made a child process!
         if (childPid == 0) {
             /* the child process */
@@ -216,35 +254,14 @@ void createChildren( int children ){
 
             //debugging output
             printf("current concurrent process %d: myPID: %ld\n", currentConcurrentProcesses, (long)getpid());
-            printf("number of children allowed to make: %d\n", children);
 
             //calling the docommand to handle the licensing.
             docommand(myID);
 
             //exiting child process
             exit(EXIT_SUCCESS);
-        } else {
-            /* the parent process */
-
-            // waiting for the child process
-            if ((childPid = waitpid(childPid, &waitStatus, WNOHANG)) == -1) {
-                perror("Failed to wait for child\n");
-            } else {
-                if( WIFEXITED(waitStatus) ) {
-                    currentConcurrentProcesses--;
-                    returnlicense(sharedHeap);
-                    printf("current concurrent process %d\n", currentConcurrentProcesses);
-                    printf("Child process successfully exited with status: %d\n", waitStatus);
-                }
-            }
-            printf("total processes created: %d\n", totalProcessesCreated);
-            if( children == totalProcessesCreated ){
-                break;
-            }
         }
-
     }
-
 }
 
 void createGrandChildren(){
@@ -307,4 +324,74 @@ void parsingArgs(int argc, char** argv){
         nValue = atoi(argv[optind]);
         printf("nValue: %d\n", nValue);
     }
+}
+
+static void myTimeOutHandler( int s ) {
+    char timeout[] = "timing out processes.\n";
+    int timeoutSize = sizeof( timeout );
+    int errsave;
+
+    errsave = errno;
+    write(STDERR_FILENO, timeout, timeoutSize );
+    errno = errsave;
+    int i;
+
+    //waiting for max amount of children to terminate
+    for (i = 0; i <= nValue ; ++i) {
+        wait(NULL);
+    }
+    //detaching shared memory
+    if (detachandremove(id, sharedHeap) == -1) {
+        perror("failed to destroy shared memory segment\n");
+        exit(0);
+    } else {
+        printf("destroyed shared memory segment\n");
+    }
+    exit(0);
+}
+
+static void myKillSignalHandler( int s ){
+    char timeout[] = "caught ctrl+c, ending processes.\n";
+    int timeoutSize = sizeof( timeout );
+    int errsave;
+
+    errsave = errno;
+    write(STDERR_FILENO, timeout, timeoutSize );
+    errno = errsave;
+    int i;
+
+    //waiting for max amount of children to terminate
+    for (i = 0; i <= nValue ; ++i) {
+        wait(NULL);
+    }
+    //detaching shared memory
+    if (detachandremove(id, sharedHeap) == -1) {
+        perror("failed to destroy shared memory segment\n");
+        exit(0);
+    } else {
+        printf("destroyed shared memory segment\n");
+    }
+    exit(0);
+}
+
+static int setupUserInterrupt( void ){
+    struct sigaction act;
+    act.sa_handler = myKillSignalHandler;
+    act.sa_flags = 0;
+    return (sigemptyset(&act.sa_mask) || sigaction(SIGINT, &act, NULL));
+}
+
+static int setupinterrupt( void ){
+    struct sigaction act;
+    act.sa_handler = myTimeOutHandler;
+    act.sa_flags = 0;
+    return (sigemptyset(&act.sa_mask) || sigaction(SIGALRM, &act, NULL));
+}
+
+static int setupitimer(int tValue){
+    struct itimerval value;
+    value.it_interval.tv_sec = tValue;
+    value.it_interval.tv_usec = 0;
+    value.it_value = value.it_interval;
+    return (setitimer( ITIMER_REAL, &value, NULL));
 }

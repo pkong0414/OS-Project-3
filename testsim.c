@@ -9,10 +9,21 @@
 
 void parsingArgs(int argc, char** argv);                        //Function for parsing arguments
 
+//  SIGNAL HANDLER
+static void myKillSignalHandler( int s );                 //This is our signal handler for interrupts
+static int setupUserInterrupt( void );
+
 int opt, sleepValue, repeatFactor;
 
 int main(int argc, char** argv){
     printf("exec worked inside ./testsim\n");
+
+    // SETTING UP USER INTERRUPT
+    if( setupUserInterrupt() == -1 ){
+        perror( "failed to set up a user kill signal.\n");
+        return 1;
+    }
+
     int c;
     long myPid = getpid();
     for(c = 0; c < argc; c++){
@@ -65,4 +76,23 @@ void parsingArgs(int argc, char** argv){
                 exit(EXIT_FAILURE);
         }
     } /* END OF GETOPT */
+}
+
+static void myKillSignalHandler( int s ){
+    char timeout[] = "caught ctrl+c, ending processes.\n";
+    int timeoutSize = sizeof( timeout );
+    int errsave;
+
+    errsave = errno;
+    write(STDERR_FILENO, timeout, timeoutSize );
+    errno = errsave;
+
+    exit(0);
+}
+
+static int setupUserInterrupt( void ){
+    struct sigaction act;
+    act.sa_handler = myKillSignalHandler;
+    act.sa_flags = 0;
+    return (sigemptyset(&act.sa_mask) || sigaction(SIGINT, &act, NULL));
 }

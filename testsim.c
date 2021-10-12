@@ -18,7 +18,7 @@ int opt, sleepValue, repeatFactor;
 
 int main(int argc, char** argv){
     printf("exec worked inside ./testsim\n");
-
+    char *log;
     // SETTING UP USER INTERRUPT
     if( setupUserInterrupt() == -1 ){
         perror( "failed to set up a user kill signal.\n");
@@ -33,9 +33,14 @@ int main(int argc, char** argv){
 
     sleepValue = atoi(argv[1]);
     repeatFactor = atoi(argv[2]);
-
-    for(c = 0; c < repeatFactor; c++){
+    log = malloc(40*sizeof(char));
+    for(c = 1; c != repeatFactor; c++){
         printf("pid: %ld. Sleeping for %d\n", myPid, sleepValue);
+        sprintf( log,"%ld  Iteration:%d of %d", myPid, c, repeatFactor);
+        printf("%s\n", log);
+        //*************************** CRITICAL SECTION *****************************************
+        logmsg(log);
+        //*************************** CRITICAL SECTION *****************************************
         sleep(sleepValue);
     }
 

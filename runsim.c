@@ -23,10 +23,9 @@
 
 // FUNCTION PROTOTYPES
 void initShm(key_t myKey);                          //This function will initialize shared memory.
-void docommand( const int i );                      //This function will manage the giving and receiving of licenses.
+void docommand( const int i );                      //This function will be doing the exec functions.
 void critical_section();                            //This helper function will operate the critical section.
 void createChildren();                           //This function will create the children processes from main process
-void createGranChildren();                          //This function will be doing the exec functions.
 void parsingArgs(int argc, char** argv);            //This helper function will parse command line args.
 int max(int numArr[], int n);
 
@@ -88,10 +87,6 @@ int main( int argc, char* argv[]){
     // PARSING ARGUMENTS FIRST
     parsingArgs(argc, argv);
 
-    // Getting a new line after reading file
-    printf("END OF STDIN\n");
-
-
     //setting up interrupts after parsing arguments
     if (setupinterrupt() == -1) {
         perror("Failed to set up handler for SIGALRM");
@@ -105,7 +100,7 @@ int main( int argc, char* argv[]){
 
     // Parsing is finished, now we are allocating and adding to licenses
     initShm(myKey);
-    initlicense(sharedHeap);
+    sharedHeap->nlicense = initlicense(sharedHeap);
     addtolicenses(sharedHeap, nValue);
 
     //***************************** LOOP SECTION FOR CREATING NEW PROCESSES ******************************
@@ -118,21 +113,24 @@ int main( int argc, char* argv[]){
         count = 0;
         while (tempStr != NULL)
         {
-            printf ("tempStr: %s\n",tempStr);
+//            printf ("tempStr: %s\n",tempStr);
             strcpy(execArgs[count], tempStr);
             tempStr = strtok (NULL, " ");
-            printf("execArgs[%d]: %s\n", count, execArgs[count]);
+//            printf("execArgs[%d]: %s\n", count, execArgs[count]);
             count++;
         }
 
+        // clearing out buffer.
         if (buffer[lineNum] == '\n')
             buffer[lineNum] = '\0';
-        //printing debugging output for fgets received.
-        printf("buffer: %s\n", buffer);
-        //creating child processes
-        createChildren();
 
+        //creating child processes. We'll only create children as long as we have arguments loaded from testing.data!
+        createChildren();
     }while(!feof(stdin));
+
+    // Getting a new line after reading file
+    printf("END OF STDIN\n");
+
     //***************************** LOOP SECTION FOR CREATING NEW PROCESSES ******************************
 
     /* the parent process */
@@ -202,9 +200,9 @@ void docommand(const int i){
     /* Usage: ./testsim [-s seconds for sleep] [-r number of repeats]
      * We'll need to set up just like this
     */
-    char *testCallStr;
-    testCallStr = "./testsim,testsim,5,10";
+
     if( getlicense(sharedHeap) == 1 ) {
+        //This means we've run out of license and must wait for more
         do {
             sharedHeap->choosing[i] = 1;
             sharedHeap->number[i] = 1 + sharedHeap->number[max(sharedHeap->number, MAX_PROC)];
@@ -277,10 +275,6 @@ void createChildren(){
             exit(EXIT_SUCCESS);
         }
     }
-}
-
-void createGrandChildren(){
-
 }
 
 int max(int numArr[], int n)

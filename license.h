@@ -20,7 +20,7 @@ typedef struct sharedMemory {
 // functions
 int getlicense(sharedMem *);                        //Blocks until a license is available
 int returnlicense(sharedMem *);                     //Increments the number of avail license object
-int initlicense(sharedMem *);                       //Performs any needed initialization of the license object
+int initlicense();                       //Performs any needed initialization of the license object
 void addtolicenses(sharedMem *, int n);             //Adds n licenses to the number available
 void removelicenses(sharedMem *, int n);            //Decrements the number of licenses by n
 void logmsg(const char* msg);                       //Write the specified message to the log file.

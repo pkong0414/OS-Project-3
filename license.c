@@ -21,9 +21,8 @@ int returnlicense(sharedMem* sharedHeap){
     printf("current available license: %d\n", sharedHeap->nlicense);
 }
 
-int initlicense(sharedMem *sharedHeap){
+int initlicense(){
     printf("initializing license to 0\n");
-    sharedHeap->nlicense = 0;
     return 0;
 }
 
@@ -41,37 +40,12 @@ void logmsg(const char* msg){
     /* logmsg in the format:
     *   Time PID Iteration# of NumberOfIterations
     */
-    //The savelog function saves the logged message to a disk file.
-    char* filename = "temp.dat";
+    //The logmsg function saves the logged message to a disk file.
+    char *filename = "logfile.data";
     FILE *saveFile;
-    char *formattedTime;
-    saveFile = fopen(filename, "w");
+    saveFile = fopen(filename, "a");
 
-    if(saveFile == NULL){
-        perror("log.c: ERROR");
-        //return -1 if unsuccessful
-        return;
-    }
-    else {
-        //Now writing to file
-        fprintf( saveFile, "%s\n", msg);
-        //closing file
-        if(fclose(saveFile) == -1){
-            perror("log.c: ERROR");
-
-            //exiting since file is unable to be closed
-            exit(EXIT_FAILURE);
-        }
-        else {
-            printf("File saved to: %s\n", filename);
-            //return 0 if successful
-            return;
-        }
-    }
-}
-
-char *getTime(){
-    // getting our total seconds
+    //********************************* TIME STAMP **********************************
     time_t epoch_seconds;
     epoch_seconds = time(NULL);
     int hours;
@@ -93,6 +67,33 @@ char *getTime(){
 
     // converting the newly acquired time units into specified format of: HH:MM:SS for timestamp.
     sprintf( timestamp, "[%02u:%02u:%02u]", hours, minutes, seconds);
+    printf( "timestamp: %s\n", timestamp);
+    //********************************* TIME STAMP **********************************
 
-    return timestamp;
+    if(saveFile == NULL){
+        perror("log.c: ERROR");
+        //return -1 if unsuccessful
+        return;
+    }
+    else {
+        //Now writing to file
+        fprintf( saveFile, "%s %s\n", timestamp, msg);
+        //closing file
+        if(fclose(saveFile) == -1){
+            perror("log.c: ERROR");
+
+            //exiting since file is unable to be closed
+            exit(EXIT_FAILURE);
+        }
+        else {
+            printf("File saved to: %s\n", filename);
+            //return 0 if successful
+            return;
+        }
+    }
+}
+
+char *getTime(){
+    // getting our total seconds
+
 }

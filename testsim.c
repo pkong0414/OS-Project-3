@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <unistd.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include "license.h"

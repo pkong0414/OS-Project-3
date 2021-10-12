@@ -19,7 +19,7 @@
 #include "license.h"
 #define PERM (IPC_CREAT | S_IRUSR | S_IWUSR)
 
-#define MAX_CANON 13
+#define MAX_CANON 1025
 
 // FUNCTION PROTOTYPES
 void initShm(key_t myKey);                          //This function will initialize shared memory.
@@ -71,6 +71,7 @@ int totalProcessesCreated = 0;                      //number of created process
 int childPid, id, waitStatus;                       //This is for managing our processes
 key_t myKey;                                        //Shared memory key
 sharedMem *sharedHeap;                              //shared memory object
+char execArgs[3][MAX_CANON];                        //the execl arguments for the grandchild processes
 
 
 int main( int argc, char* argv[]){
@@ -80,25 +81,16 @@ int main( int argc, char* argv[]){
         return 1;
     }
 
-    char command[2][20];
+    char *tempStr;
     char buffer[MAX_CANON];
-    int i, spaceCount;
-//    do{
-//        //We'll be using fgets() for our stdin. "testing.data" is what we will be receiving from.
-//        fgets(buffer, MAX_CANON, stdin);
-//
-//        spaceCount = 0;
-//        //printing debugging output for fgets received.
-//        printf("buffer: %s\n", buffer);
-//
-//        //clearing the buffer
-//        buffer[0] = '\0';
-//    }while(!feof(stdin));
+    int i, currentIndex, count = 0;
+
+    // PARSING ARGUMENTS FIRST
+    parsingArgs(argc, argv);
 
     // Getting a new line after reading file
-    printf("\n");
+    printf("END OF STDIN\n");
 
-    parsingArgs(argc, argv);
 
     //setting up interrupts after parsing arguments
     if (setupinterrupt() == -1) {
@@ -116,11 +108,34 @@ int main( int argc, char* argv[]){
     initlicense(sharedHeap);
     addtolicenses(sharedHeap, nValue);
 
-    //creating child processes
-    createChildren();
+    //***************************** LOOP SECTION FOR CREATING NEW PROCESSES ******************************
+    do{
+        //We'll be using fgets() for our stdin. "testing.data" is what we will be receiving from.
+        fgets(buffer, MAX_CANON, stdin);
+        printf("strlen: %ld\n", strlen(buffer));
+        size_t lineNum = strlen(buffer) - 1;
+        tempStr = strtok(buffer, " ");
+        count = 0;
+        while (tempStr != NULL)
+        {
+            printf ("tempStr: %s\n",tempStr);
+            strcpy(execArgs[count], tempStr);
+            tempStr = strtok (NULL, " ");
+            printf("execArgs[%d]: %s\n", count, execArgs[count]);
+            count++;
+        }
+
+        if (buffer[lineNum] == '\n')
+            buffer[lineNum] = '\0';
+        //printing debugging output for fgets received.
+        printf("buffer: %s\n", buffer);
+        //creating child processes
+        createChildren();
+
+    }while(!feof(stdin));
+    //***************************** LOOP SECTION FOR CREATING NEW PROCESSES ******************************
 
     /* the parent process */
-
     // waiting for the child process
     while( currentConcurrentProcesses > 1 ) {
         if (wait(&waitStatus) == -1) {
@@ -207,7 +222,7 @@ void docommand(const int i){
 
             printf("process %d received the license!\n", i);
             sharedHeap->number[i] = 0;                          //giving up the number
-            execl(testCallStr, NULL);
+            execl("./testsim",execArgs[0],execArgs[1],execArgs[2], NULL);
 
             perror("exec failed");
             //remainder section
@@ -216,7 +231,7 @@ void docommand(const int i){
         return;
     } else {
         printf("process %d received the license!\n", i);
-        execl("./testsim", "testsim", "5", "10", NULL);
+        execl("./testsim",execArgs[0],execArgs[1],execArgs[2], NULL);
 
         perror("exec failed");
         return;

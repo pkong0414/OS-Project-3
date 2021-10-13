@@ -26,4 +26,4 @@ testsim: $(OBJ2)
 	$(CC) -o $@ $^ license.o
 
 clean:
-	/bin/rm '-f' *.o $(TARGETS)
+	/bin/rm '-f' *.o $(TARGETS) *.log

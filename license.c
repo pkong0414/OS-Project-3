@@ -6,7 +6,7 @@ int getlicense(sharedMem* sharedHeap){
     //This function will detect the number of licenses available.
     //If there are no available licenses, it will block any processes from taking a license.
     if( sharedHeap->nlicense == 0 ){
-        return 1;
+        return -1;
     } else {
         //we have licenses now.
         sharedHeap->nlicense--;
@@ -41,9 +41,9 @@ void logmsg(const char* msg){
     *   Time PID Iteration# of NumberOfIterations
     */
     //The logmsg function saves the logged message to a disk file.
-    char *filename = "logfile.data";
+    char *filename = "logfile.log";
     FILE *saveFile;
-    saveFile = fopen(filename, "a");
+    saveFile = fopen(filename, "a+");
 
     //********************************* TIME STAMP **********************************
     time_t epoch_seconds;
@@ -60,7 +60,7 @@ void logmsg(const char* msg){
     // To calculate seconds we'll do (epoch_time % 60)
 
     // Hours needs to be -5 (we are cst local time and we are converting from UTC)
-    hours = ((epoch_seconds / 3600) % 24) - 5;
+    hours = (((epoch_seconds / 3600) % 24) - 5);
     minutes = ((epoch_seconds / 60) % 60);
     seconds = (epoch_seconds % 60);
     timestamp = malloc(10*sizeof(char) + 1);

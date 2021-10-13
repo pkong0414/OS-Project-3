@@ -25,7 +25,7 @@ testsim 1 2
 this means testsim will contain 1 second of sleep and 2 iterations of this.
 
 TROUBLE:
-Had some trouble making the the semaphores initially. I think I got it worked out, now. Then last minute for some reason it kept spawning 2 grandchildren process each time. I was not able to work out the bug on that one in time. I'll keep working on it to try to resolve this.
+Had some trouble making the semaphores initially. I think I got it worked out, now. Then last minute for some reason it kept spawning 2 grandchildren process each time. I think I've resolved the issue. NOTE: the file that is being streamed should not contain an extra line at the end of file or at the last line. I'm going to resubmit this one since this one is way better now that we don't have processes creating 2 of the same exec arguments.
 
 TODO:
 Definitely clean up. A lot of functions are used and could definitely be put into organized files for future use.

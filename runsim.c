@@ -50,7 +50,7 @@ enum state{idle, want_in, in_cs};
 int opt, timer, nValue, tValue;                     //This is for managing our getopts
 int currentConcurrentProcesses = 1;                 //Initialized as 1 since the main program is also a process.
 int totalProcessesCreated = 0;                      //number of created process
-int childPid, shmID, waitStatus;                       //This is for managing our processes
+int shmID, waitStatus;                       //This is for managing our processes
 key_t myKey;                                        //Shared memory key
 sharedMem *sharedHeap;                              //shared memory object
 int semID;                                          //SEMAPHORE ID
@@ -92,8 +92,10 @@ int main( int argc, char* argv[]){
     //***************************** LOOP SECTION FOR CREATING NEW PROCESSES ******************************
     do{
         //We'll be using fgets() for our stdin. "testing.data" is what we will be receiving from.
+        fflush(stdin);
         fgets(buffer, MAX_CANON, stdin);
         printf("strlen: %ld\n", strlen(buffer));
+        printf("buffer: %s\n", buffer);
         size_t lineNum = strlen(buffer) - 1;
         tempStr = strtok(buffer, " ");
         count = 0;
@@ -238,106 +240,59 @@ void docommand(){
      * We'll need to set up just like this
     */
 
-    int gchildId;
+    pid_t gchildPid;
     int error;
-    if( getlicense(sharedHeap) == -1 ) {
-        //This means we've run out of license and must wait for more
-        do {
+    //This means we've run out of license and must wait for more
+    do {
 
-        }while( getlicense(sharedHeap) == -1);
-        //*********************************** ENTRY SECTION **********************************************
-        semWait();
-            //********************************** CRITICAL SECTION ******************************************
-            if (currentConcurrentProcesses <= MAX_PROC / 2) {
-                if ((childPid = fork()) == -1) {
-                    perror("Failed to create grandchild process\n");
-                    if (detachandremove(shmID, sharedHeap) == -1) {
-                        perror("Failed to destroy shared memory segment");
-                    }
-                    exit(EXIT_FAILURE);
-                }
-
-                currentConcurrentProcesses++;
-                totalProcessesCreated++;
-
-                // made a grandchild process!
-                if (childPid == 0) {
-                    /* the grandchild process */
-                    gchildId = getpid();
-                    //debugging output
-                    printf("current concurrent process %d: myPID: %ld\n", currentConcurrentProcesses, (long) getpid());
-                    execl("./testsim", execArgs[0], execArgs[1], execArgs[2], NULL);
-                    return;
-                } else {
-                    /* the parent of grandchild process */
-                    if (wait(&waitStatus) == -1) {
-                        perror("Failed to wait for grandchild\n");
-                    } else {
-                        if (WIFEXITED(waitStatus)) {
-                            currentConcurrentProcesses--;
-                            returnlicense(sharedHeap);
-                            printf("current concurrent process %d\n", currentConcurrentProcesses);
-                            printf("Child process successfully exited with status: %d\n", waitStatus);
-                            printf("Total number of licenses %d\n", sharedHeap->nlicense);
-                        }
-                    }
-                    printf("total processes created: %d\n", totalProcessesCreated);
-                }
-
-                //********************************** EXIT SECTION **********************************************
-                semSignal();
-                //******************************** REMAINDER SECTION *********************************************
-                return;
+    }while( getlicense(sharedHeap) == -1);
+    //*********************************** ENTRY SECTION **********************************************
+    semWait();
+    //********************************** CRITICAL SECTION ******************************************
+    if (currentConcurrentProcesses <= MAX_PROC / 2) {
+        if ((gchildPid = fork()) == -1) {
+            perror("Failed to create grandchild process\n");
+            if (detachandremove(shmID, sharedHeap) == -1) {
+                perror("Failed to destroy shared memory segment");
             }
-    } else {
-        //*********************************** ENTRY SECTION **********************************************
-            semWait();
-            //********************************** CRITICAL SECTION ******************************************
-            if (currentConcurrentProcesses <= MAX_PROC / 2) {
-                if ((childPid = fork()) == -1) {
-                    perror("Failed to create child process\n");
-                    if (detachandremove(shmID, sharedHeap) == -1) {
-                        perror("Failed to destroy shared memory segment");
-                    }
-                    exit(EXIT_FAILURE);
-                }
-
-                currentConcurrentProcesses++;
-                totalProcessesCreated++;
-
-                // made a grandchild process!
-                if (childPid == 0) {
-                    /* the grandchild process */
-
-                    //debugging output
-                    printf("current concurrent process %d: myPID: %ld\n", currentConcurrentProcesses, (long) getpid());
-                    execl("./testsim", execArgs[0], execArgs[1], execArgs[2], NULL);
-                } else {
-                    /* the parent of grandchild process */
-                    if (wait(&waitStatus) == -1) {
-                        perror("Failed to wait for child\n");
-                    } else {
-                        if (WIFEXITED(waitStatus)) {
-                            currentConcurrentProcesses--;
-                            returnlicense(sharedHeap);
-                            printf("current concurrent process %d\n", currentConcurrentProcesses);
-                            printf("Child process successfully exited with status: %d\n", waitStatus);
-                            printf("Total number of licenses %d\n", sharedHeap->nlicense);
-                        }
-                    }
-                    printf("total processes created: %d\n", totalProcessesCreated);
-                }
-            }
-            //********************************** EXIT SECTION **********************************************
-            semSignal();
+            exit(EXIT_FAILURE);
         }
-        //******************************** REMAINDER SECTION *********************************************
-        return;
+        currentConcurrentProcesses++;
+        totalProcessesCreated++;
+
+        // made a grandchild process!
+        if (gchildPid == 0) {
+            /* the grandchild process */
+            //debugging output
+            printf("current concurrent process %d: myPID: %ld\n", currentConcurrentProcesses, (long) getpid());
+            sleep(1);
+            execl("./testsim", execArgs[0], execArgs[1], execArgs[2], NULL);
+        } else {
+            /* the parent of grandchild process */
+            if (wait(&waitStatus) == -1) {
+                perror("Failed to wait for grandchild\n");
+            } else {
+                if (WIFEXITED(waitStatus)) {
+                    currentConcurrentProcesses--;
+                    returnlicense(sharedHeap);
+                    printf("current concurrent process %d\n", currentConcurrentProcesses);
+                    printf("Child process successfully exited with status: %d\n", waitStatus);
+                    printf("Total number of licenses %d\n", sharedHeap->nlicense);
+                    printf("total processes created: %d\n", totalProcessesCreated);
+                    //********************************** EXIT SECTION **********************************************
+                    semSignal();
+                    //******************************** REMAINDER SECTION *******************************************
+                    exit(EXIT_SUCCESS);
+                }
+            }
+        }
+
+    }
 }
 
 void createChildren() {
     int myID = 0;
-
+    pid_t childPid;
     if (currentConcurrentProcesses <= MAX_PROC / 2) {
         //changed this from while to if, This way it will only create 1 child!
         if ((childPid = fork()) == -1) {

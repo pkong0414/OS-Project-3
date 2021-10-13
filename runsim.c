@@ -99,15 +99,16 @@ int main( int argc, char* argv[]){
         count = 0;
         while (tempStr != NULL)
         {
-            printf ("tempStr: %s\n",tempStr);
+            //printf ("tempStr: %s\n",tempStr);
             strcpy(execArgs[count], tempStr);
             tempStr = strtok (NULL, " ");
-            printf("execArgs[%d]: %s\n", count, execArgs[count]);
+            //printf("execArgs[%d]: %s\n", count, execArgs[count]);
             count++;
         }
 
         // clearing out buffer.
-        buffer[lineNum] = '\0';
+        if(buffer[lineNum] == '\n')
+            buffer[lineNum] = '\0';
 
         //creating child processes. We'll only create children as long as we have arguments loaded from testing.data!
         createChildren();
@@ -121,19 +122,19 @@ int main( int argc, char* argv[]){
     /* the parent process */
     // waiting for the child process
     //waiting for max amount of children to terminate
-    for (i = 0; i <= nValue ; ++i) {
+    for (i = 0; i <= 20 ; ++i) {
+        /* the parent process */
         if (wait(&waitStatus) == -1) {
             perror("Failed to wait for child\n");
         } else {
             if (WIFEXITED(waitStatus)) {
                 currentConcurrentProcesses--;
-                returnlicense(sharedHeap);
                 printf("current concurrent process %d\n", currentConcurrentProcesses);
                 printf("Child process successfully exited with status: %d\n", waitStatus);
                 printf("Total number of licenses %d\n", sharedHeap->nlicense);
+                printf("total processes created: %d\n", totalProcessesCreated);
             }
         }
-        printf("total processes created: %d\n", totalProcessesCreated);
     }
 
     //detaching shared memory
@@ -237,16 +238,15 @@ void docommand(){
      * We'll need to set up just like this
     */
 
+    int gchildId;
     int error;
     if( getlicense(sharedHeap) == -1 ) {
+        //This means we've run out of license and must wait for more
         do {
 
         }while( getlicense(sharedHeap) == -1);
-        //This means we've run out of license and must wait for more
         //*********************************** ENTRY SECTION **********************************************
-        if (((error = r_semop(semID, &semW, 1)) == -1)) {
-            perror("Child failed to lock semid");
-        } else if (!error) {
+        semWait();
             //********************************** CRITICAL SECTION ******************************************
             if (currentConcurrentProcesses <= MAX_PROC / 2) {
                 if ((childPid = fork()) == -1) {
@@ -263,7 +263,7 @@ void docommand(){
                 // made a grandchild process!
                 if (childPid == 0) {
                     /* the grandchild process */
-
+                    gchildId = getpid();
                     //debugging output
                     printf("current concurrent process %d: myPID: %ld\n", currentConcurrentProcesses, (long) getpid());
                     execl("./testsim", execArgs[0], execArgs[1], execArgs[2], NULL);
@@ -280,25 +280,19 @@ void docommand(){
                             printf("Child process successfully exited with status: %d\n", waitStatus);
                             printf("Total number of licenses %d\n", sharedHeap->nlicense);
                         }
-
                     }
                     printf("total processes created: %d\n", totalProcessesCreated);
                 }
-            }
 
-            //********************************** EXIT SECTION **********************************************
-            if ((error = r_semop(semID, &semS, 1)) == -1)
-                perror("Failed to unlock semid");
-            //******************************** REMAINDER SECTION *********************************************
-            return;
-        }
+                //********************************** EXIT SECTION **********************************************
+                semSignal();
+                //******************************** REMAINDER SECTION *********************************************
+                return;
+            }
     } else {
         //*********************************** ENTRY SECTION **********************************************
-        if (((error = r_semop(semID, &semW, 1)) == -1)) {
-            perror("Child failed to lock semid");
-        } else if (!error) {
+            semWait();
             //********************************** CRITICAL SECTION ******************************************
-
             if (currentConcurrentProcesses <= MAX_PROC / 2) {
                 if ((childPid = fork()) == -1) {
                     perror("Failed to create child process\n");
@@ -335,12 +329,10 @@ void docommand(){
                 }
             }
             //********************************** EXIT SECTION **********************************************
-            if ((error = r_semop(semID, &semS, 1)) == -1)
-                perror("Failed to unlock semid");
+            semSignal();
         }
         //******************************** REMAINDER SECTION *********************************************
         return;
-    }
 }
 
 void createChildren() {
@@ -371,19 +363,7 @@ void createChildren() {
 
             //We've got a fork that will be making an execl
             docommand();
-        } else {
-            if (wait(&waitStatus) == -1) {
-                perror("Failed to wait for child\n");
-            } else {
-                if (WIFEXITED(waitStatus)) {
-                    currentConcurrentProcesses--;
-                    printf("current concurrent process %d\n", currentConcurrentProcesses);
-                    printf("Child process successfully exited with status: %d\n", waitStatus);
-                    printf("Total number of licenses %d\n", sharedHeap->nlicense);
-                    printf("total processes created: %d\n", totalProcessesCreated);
-                    return;
-                }
-            }
+            exit(EXIT_SUCCESS);
         }
     }
 }
@@ -444,7 +424,7 @@ static void myTimeOutHandler( int s ) {
     int i;
 
     //waiting for max amount of children to terminate
-    for (i = 0; i <= nValue ; ++i) {
+    for (i = 0; i <= 20 ; ++i) {
         wait(NULL);
     }
 
@@ -476,7 +456,7 @@ static void myKillSignalHandler( int s ){
     int i;
 
     //waiting for max amount of children to terminate
-    for (i = 0; i <= nValue ; ++i) {
+    for (i = 0; i <= 20; ++i) {
         wait(NULL);
     }
     //detaching shared memory
